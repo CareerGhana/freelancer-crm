@@ -801,7 +801,161 @@ body {
 .status-overdue   { background: #fef3c7; color: #92400e; border: 1px solid #fbbf24; }
 
 /* ============================================================
-   TIME TRACKER
+   TIME TRACKER — MANUAL ENTRY & GROUPED ENTRIES
+   ============================================================ */
+
+.manual-entry-card {
+    background: #fff;
+    border-radius: var(--radius);
+    border: 1px solid var(--gray-200);
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 28px;
+    overflow: hidden;
+    transition: border-color .2s, box-shadow .2s;
+}
+
+.manual-entry-card.editing {
+    border-color: var(--indigo);
+    box-shadow: 0 0 0 3px rgba(79,70,229,.1);
+}
+
+.manual-entry-header {
+    padding: 14px 20px;
+    background: var(--gray-50);
+    border-bottom: 1px solid var(--gray-100);
+}
+
+.manual-entry-title {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--gray-700);
+}
+
+.manual-entry-fields {
+    display: grid;
+    grid-template-columns: 2fr 3fr 1fr 1.5fr;
+    gap: 16px;
+    padding: 20px 20px 0;
+}
+
+.manual-entry-footer {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 10px;
+    padding: 16px 20px;
+}
+
+/* Entries header with summary */
+.entries-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+.entries-header h3 {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--gray-800);
+}
+
+.entries-summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.summary-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    background: var(--gray-100);
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--gray-600);
+}
+
+.summary-chip-green { background: var(--green-light); color: #065f46; }
+
+/* Entry groups (by date) */
+.entry-group { margin-bottom: 20px; }
+
+.entry-group-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 4px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--gray-200);
+}
+
+.entry-group-date {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--gray-500);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+}
+
+.entry-group-totals {
+    font-size: 12px;
+    color: var(--gray-400);
+    font-weight: 500;
+}
+
+/* Entry item — updated with dot */
+.entry-item {
+    background: #fff;
+    border-radius: var(--radius);
+    padding: 13px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--gray-100);
+    margin-bottom: 8px;
+    transition: box-shadow .15s, border-color .15s;
+}
+
+.entry-item:hover { box-shadow: var(--shadow-md); border-color: var(--gray-200); }
+
+.entry-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    min-width: 0;
+}
+
+.entry-project-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.entry-project { font-size: 13px; font-weight: 600; color: var(--gray-900); margin-bottom: 2px; }
+.entry-desc    { font-size: 12px; color: var(--gray-500); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px; }
+
+.entry-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+.entry-duration { font-size: 14px; font-weight: 700; color: var(--indigo); min-width: 36px; text-align: right; }
+.entry-earnings { font-size: 13px; font-weight: 600; color: var(--green); min-width: 54px; text-align: right; }
+
+/* ============================================================
+   TIME TRACKER — TIMER CARD
    ============================================================ */
 
 .active-timer { margin-bottom: 28px; }
@@ -1189,6 +1343,31 @@ form { padding: 24px; }
 .summary-total span:last-child { color: var(--indigo); }
 
 /* ============================================================
+   LOADING / SKELETON
+   ============================================================ */
+
+.loading-state {
+    padding: 40px;
+    text-align: center;
+    color: var(--gray-400);
+    font-size: 14px;
+}
+
+.skeleton-line {
+    height: 28px;
+    background: linear-gradient(90deg, var(--gray-100) 25%, var(--gray-200) 50%, var(--gray-100) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s infinite;
+    border-radius: 6px;
+    width: 80px;
+}
+
+@keyframes shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* ============================================================
    LOGO UPLOAD
    ============================================================ */
 
@@ -1394,11 +1573,13 @@ form { padding: 24px; }
 
     .main-content { padding: 24px 20px; }
     .account-grid { grid-template-columns: 1fr; }
+    .manual-entry-fields { grid-template-columns: 1fr 1fr; }
 }
 
 @media (max-width: 680px) {
     .stats-grid { grid-template-columns: 1fr; }
     .form-row   { grid-template-columns: 1fr; }
+    .manual-entry-fields { grid-template-columns: 1fr; }
     .invoice-item-row { grid-template-columns: 2fr 1fr 1fr; }
     .invoice-item-row .item-amount,
     .invoice-item-row .remove-item-btn { display: none; }

@@ -7,6 +7,8 @@
     <link rel="stylesheet" href="styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Supabase SDK — must load before supabase.js, auth.js, app.js -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
@@ -372,11 +374,12 @@
                     </button>
                 </div>
 
-                <div class="active-timer" id="active-timer" style="display:none;">
+                <!-- Live Timer Card (hidden until started) -->
+                <div id="active-timer" style="display:none;" class="active-timer">
                     <div class="timer-card">
                         <div class="timer-top">
                             <div class="timer-pulse"></div>
-                            <span class="timer-status-text">Recording time</span>
+                            <span class="timer-status-text">Timer running</span>
                         </div>
                         <div class="timer-body">
                             <div class="timer-fields">
@@ -391,15 +394,61 @@
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                                         <rect x="6" y="6" width="12" height="12"/>
                                     </svg>
-                                    Stop
+                                    Stop &amp; Save
                                 </button>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <div class="section-header">
+                <!-- Manual Entry Form -->
+                <div class="manual-entry-card" id="manual-entry-card">
+                    <div class="manual-entry-header">
+                        <div class="manual-entry-title">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                            </svg>
+                            Log Time Manually
+                        </div>
+                    </div>
+                    <form id="manual-entry-form">
+                        <input type="hidden" id="manual-entry-id">
+                        <div class="manual-entry-fields">
+                            <div class="form-group">
+                                <label>Project <span class="required">*</span></label>
+                                <select id="manual-project" required>
+                                    <option value="">Select project</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Description <span class="required">*</span></label>
+                                <input type="text" id="manual-description" placeholder="What did you work on?" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Hours <span class="required">*</span></label>
+                                <input type="number" id="manual-hours" placeholder="e.g. 2.5" min="0.01" step="0.25" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Date <span class="required">*</span></label>
+                                <input type="date" id="manual-date" required>
+                            </div>
+                        </div>
+                        <div class="manual-entry-footer">
+                            <button type="button" class="btn-ghost" id="manual-cancel-btn" style="display:none;" onclick="cancelEditEntry()">Cancel</button>
+                            <button type="submit" class="btn-primary" id="manual-submit-btn">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                    <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                                </svg>
+                                Add Entry
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Entries List -->
+                <div class="entries-header">
                     <h3>Time Entries</h3>
+                    <div class="entries-summary" id="entries-summary"></div>
                 </div>
                 <div id="entries-list"></div>
             </div>
@@ -731,6 +780,7 @@
     <div id="toast" class="toast" style="display:none;"></div>
 
     <script src="db.js"></script>
+    <script src="supabase.js"></script>
     <script src="auth.js"></script>
     <script src="app.js"></script>
 </body>

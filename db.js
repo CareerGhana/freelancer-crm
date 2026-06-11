@@ -1,234 +1,292 @@
 // ============================================================
-// Database — localStorage, per-user namespace.
+// Database — Supabase backend
+// All methods are async and return data directly.
 // ============================================================
 
 class Database {
     constructor() {
-        this.ns = 'default'; // overridden per user after login
+        this.userId = null;
+        // In-memory cache so aggregate functions (used by the chart
+        // and dashboard cards) don't need an extra round-trip.
+        this._cache = {};
     }
 
-    setUserNamespace(userId) {
-        this.ns = `user_${userId}`;
-        this.initDB();
+    setUser(user) {
+        this.userId = user.id;
+        this._cache = {};
     }
 
-    key(name) {
-        return `${this.ns}_${name}`;
-    }
+    _bust() { this._cache = {}; }
 
-    initDB() {
-        if (!localStorage.getItem(this.key('clients')))     localStorage.setItem(this.key('clients'),     JSON.stringify([]));
-        if (!localStorage.getItem(this.key('projects')))    localStorage.setItem(this.key('projects'),    JSON.stringify([]));
-        if (!localStorage.getItem(this.key('timeEntries'))) localStorage.setItem(this.key('timeEntries'), JSON.stringify([]));
-        if (!localStorage.getItem(this.key('invoices')))    localStorage.setItem(this.key('invoices'),    JSON.stringify([]));
-        this.addSampleData();
-    }
+    // ── internal helpers ─────────────────────────────────────
 
-    addSampleData() {
-        const clients = this.getClients();
-        if (clients.length === 0) {
-            const sampleClients = [
-                { id: '1', name: 'Acme Corp',     email: 'billing@acme.com',        phone: '555-0101', company: 'Acme Corporation', address: '123 Business St, New York, NY' },
-                { id: '2', name: 'TechStart Inc', email: 'accounts@techstart.com',  phone: '555-0102', company: 'TechStart',          address: '456 Innovation Ave, San Francisco, CA' }
-            ];
-            localStorage.setItem(this.key('clients'), JSON.stringify(sampleClients));
-
-            const sampleProjects = [
-                { id: '1', name: 'Website Redesign',       clientId: '1', hourlyRate: 75, status: 'active' },
-                { id: '2', name: 'Mobile App Development', clientId: '2', hourlyRate: 85, status: 'active' }
-            ];
-            localStorage.setItem(this.key('projects'), JSON.stringify(sampleProjects));
-
-            const sampleTimeEntries = [
-                { id: '1', projectId: '1', description: 'Homepage design',  duration: 4, date: '2026-05-28' },
-                { id: '2', projectId: '1', description: 'CSS styling',       duration: 3, date: '2026-05-29' },
-                { id: '3', projectId: '2', description: 'API integration',   duration: 6, date: '2026-05-30' }
-            ];
-            localStorage.setItem(this.key('timeEntries'), JSON.stringify(sampleTimeEntries));
-        }
+    async _all(table) {
+        if (this._cache[table]) return this._cache[table];
+        const { data, error } = await sb
+            .from(table)
+            .select('*')
+            .eq('user_id', this.userId)
+            .order('created_at', { ascending: false });
+        if (error) { console.error(`db._all(${table})`, error); return []; }
+        this._cache[table] = data;
+        return data;
     }
 
     // ── Clients ──────────────────────────────────────────────
 
-    getClients() {
-        return JSON.parse(localStorage.getItem(this.key('clients')) || '[]');
+    async getClients() {
+        return this._all('clients');
     }
 
-    addClient(client) {
-        const clients = this.getClients();
-        client.id = Date.now().toString();
-        clients.push(client);
-        localStorage.setItem(this.key('clients'), JSON.stringify(clients));
-        return client;
+    async getClientById(id) {
+        const list = await this.getClients();
+        return list.find(c => c.id === id) || null;
     }
 
-    updateClient(client) {
-        const clients = this.getClients();
-        const idx = clients.findIndex(c => c.id === client.id);
-        if (idx !== -1) { clients[idx] = client; localStorage.setItem(this.key('clients'), JSON.stringify(clients)); }
+    async addClient(client) {
+        const { data, error } = await sb.from('clients').insert({
+            user_id: this.userId,
+            name:    client.name,
+            email:   client.email    || '',
+            phone:   client.phone    || '',
+            company: client.company  || '',
+            address: client.address  || ''
+        }).select().single();
+        if (error) throw error;
+        this._bust();
+        return data;
     }
 
-    deleteClient(id) {
-        const filtered = this.getClients().filter(c => c.id !== id);
-        localStorage.setItem(this.key('clients'), JSON.stringify(filtered));
+    async updateClient(client) {
+        const { error } = await sb.from('clients').update({
+            name:    client.name,
+            email:   client.email    || '',
+            phone:   client.phone    || '',
+            company: client.company  || '',
+            address: client.address  || ''
+        }).eq('id', client.id).eq('user_id', this.userId);
+        if (error) throw error;
+        this._bust();
     }
 
-    getClientById(id) { return this.getClients().find(c => c.id === id); }
+    async deleteClient(id) {
+        const { error } = await sb.from('clients')
+            .delete().eq('id', id).eq('user_id', this.userId);
+        if (error) throw error;
+        this._bust();
+    }
 
     // ── Projects ─────────────────────────────────────────────
 
-    getProjects() {
-        return JSON.parse(localStorage.getItem(this.key('projects')) || '[]');
+    async getProjects() {
+        return this._all('projects');
     }
 
-    addProject(project) {
-        const projects = this.getProjects();
-        project.id = Date.now().toString();
-        projects.push(project);
-        localStorage.setItem(this.key('projects'), JSON.stringify(projects));
-        return project;
+    async getProjectById(id) {
+        const list = await this.getProjects();
+        return list.find(p => p.id === id) || null;
     }
 
-    updateProject(project) {
-        const projects = this.getProjects();
-        const idx = projects.findIndex(p => p.id === project.id);
-        if (idx !== -1) { projects[idx] = project; localStorage.setItem(this.key('projects'), JSON.stringify(projects)); }
+    async getProjectsByClient(clientId) {
+        const list = await this.getProjects();
+        return list.filter(p => p.client_id === clientId);
     }
 
-    deleteProject(id) {
-        const filtered = this.getProjects().filter(p => p.id !== id);
-        localStorage.setItem(this.key('projects'), JSON.stringify(filtered));
+    async addProject(project) {
+        const { data, error } = await sb.from('projects').insert({
+            user_id:     this.userId,
+            client_id:   project.clientId   || null,
+            name:        project.name,
+            hourly_rate: project.hourlyRate  || 0,
+            status:      project.status      || 'active'
+        }).select().single();
+        if (error) throw error;
+        this._bust();
+        return data;
     }
 
-    getProjectById(id) { return this.getProjects().find(p => p.id === id); }
-    getProjectsByClient(clientId) { return this.getProjects().filter(p => p.clientId === clientId); }
+    async updateProject(project) {
+        const { error } = await sb.from('projects').update({
+            client_id:   project.clientId   || null,
+            name:        project.name,
+            hourly_rate: project.hourlyRate  || 0,
+            status:      project.status
+        }).eq('id', project.id).eq('user_id', this.userId);
+        if (error) throw error;
+        this._bust();
+    }
+
+    async deleteProject(id) {
+        const { error } = await sb.from('projects')
+            .delete().eq('id', id).eq('user_id', this.userId);
+        if (error) throw error;
+        this._bust();
+    }
 
     // ── Time Entries ─────────────────────────────────────────
 
-    getTimeEntries() {
-        return JSON.parse(localStorage.getItem(this.key('timeEntries')) || '[]');
+    async getTimeEntries() {
+        return this._all('time_entries');
     }
 
-    addTimeEntry(entry) {
-        const entries = this.getTimeEntries();
-        entry.id   = Date.now().toString();
-        entry.date = new Date().toISOString().split('T')[0];
-        entries.push(entry);
-        localStorage.setItem(this.key('timeEntries'), JSON.stringify(entries));
-        return entry;
+    async getTimeEntriesByProject(projectId) {
+        const list = await this.getTimeEntries();
+        return list.filter(e => e.project_id === projectId);
     }
 
-    deleteTimeEntry(id) {
-        const filtered = this.getTimeEntries().filter(e => e.id !== id);
-        localStorage.setItem(this.key('timeEntries'), JSON.stringify(filtered));
+    async addTimeEntry(entry) {
+        const { data, error } = await sb.from('time_entries').insert({
+            user_id:     this.userId,
+            project_id:  entry.projectId,
+            description: entry.description || '',
+            duration:    entry.duration    || 0,
+            date:        entry.date        || new Date().toISOString().split('T')[0]
+        }).select().single();
+        if (error) throw error;
+        this._bust();
+        return data;
     }
 
-    getTimeEntriesByProject(projectId) { return this.getTimeEntries().filter(e => e.projectId === projectId); }
+    async updateTimeEntry(entry) {
+        const { error } = await sb.from('time_entries').update({
+            project_id:  entry.projectId,
+            description: entry.description || '',
+            duration:    entry.duration    || 0,
+            date:        entry.date
+        }).eq('id', entry.id).eq('user_id', this.userId);
+        if (error) throw error;
+        this._bust();
+    }
+
+    async deleteTimeEntry(id) {
+        const { error } = await sb.from('time_entries')
+            .delete().eq('id', id).eq('user_id', this.userId);
+        if (error) throw error;
+        this._bust();
+    }
 
     // ── Invoices ─────────────────────────────────────────────
 
-    getInvoices() {
-        return JSON.parse(localStorage.getItem(this.key('invoices')) || '[]');
+    async getInvoices() {
+        return this._all('invoices');
     }
 
-    addInvoice(invoice) {
-        const invoices = this.getInvoices();
-        invoice.id        = Date.now().toString();
-        invoice.status    = 'unpaid';
-        invoice.createdAt = new Date().toISOString();
-        invoices.push(invoice);
-        localStorage.setItem(this.key('invoices'), JSON.stringify(invoices));
-        return invoice;
+    async addInvoice(invoice) {
+        const { data, error } = await sb.from('invoices').insert({
+            user_id:   this.userId,
+            client_id: invoice.clientId || null,
+            number:    invoice.number,
+            date:      invoice.date,
+            due_date:  invoice.dueDate,
+            notes:     invoice.notes    || '',
+            items:     invoice.items    || [],
+            subtotal:  invoice.subtotal || 0,
+            tax:       invoice.tax      || 0,
+            total:     invoice.total    || 0,
+            status:    'unpaid'
+        }).select().single();
+        if (error) throw error;
+        this._bust();
+        return data;
     }
 
-    updateInvoice(invoice) {
-        const invoices = this.getInvoices();
-        const idx = invoices.findIndex(i => i.id === invoice.id);
-        if (idx !== -1) { invoices[idx] = invoice; localStorage.setItem(this.key('invoices'), JSON.stringify(invoices)); }
+    async markInvoiceAsPaid(id) {
+        const { error } = await sb.from('invoices').update({
+            status:    'paid',
+            paid_date: new Date().toISOString()
+        }).eq('id', id).eq('user_id', this.userId);
+        if (error) throw error;
+        this._bust();
     }
 
-    deleteInvoice(id) {
-        const filtered = this.getInvoices().filter(i => i.id !== id);
-        localStorage.setItem(this.key('invoices'), JSON.stringify(filtered));
+    async deleteInvoice(id) {
+        const { error } = await sb.from('invoices')
+            .delete().eq('id', id).eq('user_id', this.userId);
+        if (error) throw error;
+        this._bust();
     }
 
-    markInvoiceAsPaid(id) {
-        const invoices = this.getInvoices();
-        const invoice   = invoices.find(i => i.id === id);
-        if (invoice) {
-            invoice.status   = 'paid';
-            invoice.paidDate = new Date().toISOString();
-            localStorage.setItem(this.key('invoices'), JSON.stringify(invoices));
-        }
+    // ── Aggregates (all async) ────────────────────────────────
+
+    async getProjectHours(projectId) {
+        const entries = await this.getTimeEntriesByProject(projectId);
+        return entries.reduce((s, e) => s + Number(e.duration), 0);
     }
 
-    // ── Aggregates ───────────────────────────────────────────
-
-    getProjectHours(projectId) {
-        return this.getTimeEntriesByProject(projectId).reduce((s, e) => s + e.duration, 0);
-    }
-
-    getProjectEarnings(projectId) {
-        const project = this.getProjectById(projectId);
+    async getProjectEarnings(projectId) {
+        const project = await this.getProjectById(projectId);
         if (!project) return 0;
-        return this.getProjectHours(projectId) * project.hourlyRate;
+        const hours = await this.getProjectHours(projectId);
+        return hours * Number(project.hourly_rate);
     }
 
-    getTotalEarnings() {
-        return this.getProjects().reduce((t, p) => t + this.getProjectEarnings(p.id), 0);
+    async getTotalEarnings() {
+        const projects = await this.getProjects();
+        let total = 0;
+        for (const p of projects) total += await this.getProjectEarnings(p.id);
+        return total;
     }
 
-    getTotalHours() {
-        return this.getTimeEntries().reduce((s, e) => s + e.duration, 0);
+    async getTotalHours() {
+        const entries = await this.getTimeEntries();
+        return entries.reduce((s, e) => s + Number(e.duration), 0);
     }
 
-    getUnpaidInvoicesTotal() {
-        return this.getInvoices().filter(i => i.status === 'unpaid').reduce((s, i) => s + i.total, 0);
+    async getUnpaidInvoicesTotal() {
+        const invoices = await this.getInvoices();
+        return invoices
+            .filter(i => i.status === 'unpaid')
+            .reduce((s, i) => s + Number(i.total), 0);
     }
 
-    getActiveProjectsCount() {
-        return this.getProjects().filter(p => p.status === 'active').length;
+    async getActiveProjectsCount() {
+        const projects = await this.getProjects();
+        return projects.filter(p => p.status === 'active').length;
     }
 
-    getEarningsByMonth() {
+    async getEarningsByMonth() {
+        const invoices = await this.getInvoices();
         const earnings = {};
-        this.getInvoices().forEach(inv => {
-            if (inv.status === 'paid' && inv.paidDate) {
-                const m = inv.paidDate.substring(0, 7);
-                earnings[m] = (earnings[m] || 0) + inv.total;
+        invoices.forEach(inv => {
+            if (inv.status === 'paid' && inv.paid_date) {
+                const m = inv.paid_date.substring(0, 7);
+                earnings[m] = (earnings[m] || 0) + Number(inv.total);
             }
         });
         return earnings;
     }
 
-    getRecentActivity(limit = 6) {
+    async getRecentActivity(limit = 6) {
         const activities = [];
 
-        const timeEntries = this.getTimeEntries()
+        const entries  = await this.getTimeEntries();
+        const projects = await this.getProjects();
+        const invoices = await this.getInvoices();
+        const clients  = await this.getClients();
+
+        entries
             .sort((a, b) => new Date(b.date) - new Date(a.date))
-            .slice(0, 3);
-
-        timeEntries.forEach(entry => {
-            const project = this.getProjectById(entry.projectId);
-            activities.push({
-                type: 'time',
-                description: `Logged ${entry.duration}h on "${project?.name || 'Unknown'}"`,
-                date: entry.date
+            .slice(0, 3)
+            .forEach(entry => {
+                const project = projects.find(p => p.id === entry.project_id);
+                activities.push({
+                    type:        'time',
+                    description: `Logged ${entry.duration}h on "${project?.name || 'Unknown'}"`,
+                    date:        entry.date
+                });
             });
-        });
 
-        const invoices = this.getInvoices()
-            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-            .slice(0, 3);
-
-        invoices.forEach(inv => {
-            const client = this.getClientById(inv.clientId);
-            activities.push({
-                type: 'invoice',
-                description: `Invoice #${inv.number} created for ${client?.name || 'Unknown'}`,
-                date: inv.createdAt.split('T')[0]
+        invoices
+            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+            .slice(0, 3)
+            .forEach(inv => {
+                const client = clients.find(c => c.id === inv.client_id);
+                activities.push({
+                    type:        'invoice',
+                    description: `Invoice #${inv.number} created for ${client?.name || 'Unknown'}`,
+                    date:        inv.created_at.split('T')[0]
+                });
             });
-        });
 
         return activities
             .sort((a, b) => new Date(b.date) - new Date(a.date))
