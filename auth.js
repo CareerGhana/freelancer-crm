@@ -4,6 +4,18 @@
 
 // ── UI helpers ──────────────────────────────────────────────
 
+function showOnboarding() {
+    document.getElementById('auth-overlay').style.display    = 'none';
+    document.getElementById('onboarding-screen').style.display = 'flex';
+}
+
+function showAuthFromOnboarding(panel) {
+    document.getElementById('onboarding-screen').style.display = 'none';
+    document.getElementById('auth-overlay').style.display      = 'flex';
+    if (panel === 'signup') showSignup();
+    else showSignin();
+}
+
 function showSignup() {
     document.getElementById('signin-panel').classList.remove('active');
     document.getElementById('signup-panel').classList.add('active');
@@ -210,9 +222,9 @@ function populateUserUI(user) {
 async function logout() {
     await sb.auth.signOut();
     sessionStorage.removeItem('crm_user');
-    document.getElementById('app').style.display          = 'none';
-    document.getElementById('auth-overlay').style.display = 'flex';
-    showSignin();
+    document.getElementById('app').style.display               = 'none';
+    document.getElementById('auth-overlay').style.display      = 'none';
+    document.getElementById('onboarding-screen').style.display = 'flex';
     document.getElementById('signin-form').reset();
     applyLogoToUI(null);
 }
@@ -332,11 +344,25 @@ document.getElementById('logo-file-input').addEventListener('change', function (
     });
 })();
 
-// ── Auto-restore session on load ─────────────────────────────
+// ── Splash → Onboarding → Auth flow ─────────────────────────
 
 (async function init() {
+    // 1. Check for existing session first (fastest path)
     const { data: { session } } = await sb.auth.getSession();
+
+    // 2. Run splash for minimum 2s for perceived quality,
+    //    but overlap with the session check above
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    const splash = document.getElementById('splash-screen');
+    splash.classList.add('fade-out');
+    setTimeout(() => { splash.style.display = 'none'; }, 500);
+
     if (session?.user) {
+        // Already logged in — skip onboarding and go straight to app
         await enterApp(session.user);
+    } else {
+        // Show onboarding
+        document.getElementById('onboarding-screen').style.display = 'flex';
     }
 })();
